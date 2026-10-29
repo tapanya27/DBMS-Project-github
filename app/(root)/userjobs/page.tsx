@@ -31,7 +31,6 @@ import React from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   acceptBid,
-  completeJob,
   getAllFeedback,
   getAppliedJobs,
   getUserDetails,
@@ -53,44 +52,6 @@ export default function UserJobsPage() {
     setSelectedJob(job);
     setIsViewModalOpen(true);
   };
-  const rejectMutation = useMutation({
-    mutationFn: async (bidId: number) => {
-      const result = await rejectBid(bidId);
-      return result;
-    },
-    onSuccess: () => {
-      toast({
-        title: "Success",
-        description: "Bid rejected successfully",
-      });
-    },
-    onError: (err: any) => {
-      toast({
-        title: "Error",
-        description: `Failed to reject bid`,
-        variant: "destructive",
-      });
-    },
-  });
-  const acceptMutation = useMutation({
-    mutationFn: async (bidId: number) => {
-      const result = await acceptBid(bidId);
-      return result;
-    },
-    onSuccess: () => {
-      toast({
-        title: "Success",
-        description: "Bid accepted successfully",
-      });
-    },
-    onError: (err: any) => {
-      toast({
-        title: "Error",
-        description: `Failed to accept bid`,
-        variant: "destructive",
-      });
-    },
-  });
   const { data: userDetails, isLoading: userDetailsLoading } = useQuery<User[]>(
     {
       queryKey: ["user"],
@@ -103,6 +64,44 @@ export default function UserJobsPage() {
       enabled: !!user?.emailAddresses[0].emailAddress,
     }
   );
+  const rejectMutation = useMutation({
+    mutationFn: async (bidId: number) => {
+      const result = await rejectBid(bidId, userDetails?.[0]?.user_id as number);
+      return result;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: "Bid rejected successfully",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to reject bid",
+        variant: "destructive",
+      });
+    },
+  });
+  const acceptMutation = useMutation({
+    mutationFn: async (bidId: number) => {
+      const result = await acceptBid(bidId, userDetails?.[0]?.user_id as number);
+      return result;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: "Bid accepted successfully",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to accept bid",
+        variant: "destructive",
+      });
+    },
+  });
   const { data: postedJobs, isLoading: isPostedJobsLoading } = useQuery({
     queryKey: ["postedJobs"],
     queryFn: async () => {
@@ -244,7 +243,7 @@ export default function UserJobsPage() {
                           Status:{" "}
                           <Badge
                             variant={
-                              job.job_status === "Open"
+                              job.job_status === "open"
                                 ? "default"
                                 : "secondary"
                             }

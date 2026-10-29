@@ -187,9 +187,11 @@ const PageJob = () => {
     setIsBidModalOpen(false);
     router.refresh();
   };
-  const isJobOwner = userDetails?.[0]?.name === job?.client_name;
+  const isJobOwner =
+    Number(userDetails?.[0]?.user_id) === Number(job?.client_id);
   const acceptMutation = useMutation({
-    mutationFn: async (bidId: number) => acceptBid(bidId),
+    mutationFn: async (bidId: number) =>
+      acceptBid(bidId, userDetails?.[0]?.user_id as number),
     onSuccess: () => {
       toast({
         title: "Bid accepted",
@@ -208,7 +210,8 @@ const PageJob = () => {
     },
   });
   const rejectMutation = useMutation({
-    mutationFn: async (bidId: number) => rejectBid(bidId),
+    mutationFn: async (bidId: number) =>
+      rejectBid(bidId, userDetails?.[0]?.user_id as number),
     onSuccess: () => {
       toast({
         title: "Bid rejected",
@@ -277,7 +280,7 @@ const PageJob = () => {
               </p>
             </CardContent>
             <CardFooter>
-              {userDetails?.[0]?.name === job?.client_name ? (
+              {isJobOwner ? (
                 <Button className="w-full" onClick={handleApplyClick} disabled>
                   You can't apply to your own job
                 </Button>

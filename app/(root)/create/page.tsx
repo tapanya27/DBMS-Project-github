@@ -38,9 +38,11 @@ import { cn } from "@/lib/utils";
 import { SelectItem } from "@/components/ui/select";
 import { useUser } from "@clerk/nextjs";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Job, User } from "@/types";
-import { createJob, getJobs, getUserDetails } from "@/server";
+import { Loader2 } from "lucide-react";
+import { User } from "@/types";
+import { createJob, getUserDetails } from "@/server";
 import { useToast } from "@/hooks/use-toast";
+import { useEffect } from "react";
 
 const formSchema = z.object({
   title: z.string().min(5, {
@@ -103,8 +105,22 @@ export default function PostJobPage() {
     },
     enabled: !!user?.emailAddresses[0].emailAddress,
   });
+  const isClient = data?.[0]?.role === "client";
+  useEffect(() => {
+    if (!isLoading && data && !isClient) {
+      toast({
+        title: "Clients only",
+        description: "Switch your role to Client on Profile to post jobs.",
+        variant: "destructive",
+      });
+      router.replace("/jobs");
+    }
+  }, [data, isClient, isLoading, router, toast]);
   const mutation = useMutation({
     mutationFn: async (values: z.infer<typeof formSchema>) => {
+      if (!isClient) {
+        throw new Error("Only clients can post jobs");
+      }
       const result = await createJob(
         values.title,
         values.description,
@@ -120,27 +136,35 @@ export default function PostJobPage() {
         title: "Job posted successfully",
         description: "Your job has been posted successfully",
       });
+      router.push("/jobs");
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
         title: "Error",
-        description: "An error occurred while posting your job",
+        description: error.message || "An error occurred while posting your job",
+        variant: "destructive",
       });
     },
   });
   function onSubmit(values: z.infer<typeof formSchema>) {
     mutation.mutate(values);
-    router.push("/jobs");
   }
 
   const handleSkillSelect = (skill: string) => {
-    if (selectedSkills.includes(skill)) {
-      setSelectedSkills(selectedSkills.filter((s) => s !== skill));
-    } else {
-      setSelectedSkills([...selectedSkills, skill]);
-    }
-    form.setValue("skills", selectedSkills);
+    const next = selectedSkills.includes(skill)
+      ? selectedSkills.filter((s) => s !== skill)
+      : [...selectedSkills, skill];
+    setSelectedSkills(next);
+    form.setValue("skills", next, { shouldValidate: true });
   };
+  if (isLoading || !isClient) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <Loader2 className="animate-spin w-10 h-10" />
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto py-8">
       <Card className="max-w-2xl mx-auto">

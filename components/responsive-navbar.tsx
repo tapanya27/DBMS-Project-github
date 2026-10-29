@@ -17,6 +17,10 @@ import {
 } from "@/components/ui/hover-card";
 import { useRouter } from "next/navigation";
 import React from "react";
+import { useQuery } from "@tanstack/react-query";
+import { getUserDetails } from "@/server";
+import type { User as DbUser } from "@/types";
+
 export default function ResponsiveNavbar({ user }: { user: User }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { theme, setTheme } = useTheme();
@@ -32,7 +36,17 @@ export default function ResponsiveNavbar({ user }: { user: User }) {
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark");
   };
-  console.log(user);
+  const { data: profile } = useQuery({
+    queryKey: ["user"],
+    queryFn: async () => {
+      const result = await getUserDetails(
+        user?.emailAddresses[0].emailAddress as string
+      );
+      return result as DbUser[];
+    },
+    enabled: !!user?.emailAddresses?.[0]?.emailAddress,
+  });
+  const isClient = profile?.[0]?.role === "client";
   return (
     <nav className="bg-background shadow-md dark:shadow-gray-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -55,9 +69,10 @@ export default function ResponsiveNavbar({ user }: { user: User }) {
           <div className="hidden md:block">
             <div className="ml-10 flex items-baseline space-x-4">
               <NavLink href="/jobs">Find Jobs</NavLink>
-              <NavLink href="/create">Post Jobs</NavLink>
+              {isClient && <NavLink href="/create">Post Jobs</NavLink>}
               <NavLink href="/userjobs">Your Jobs</NavLink>
-              <NavLink href="/inprogress">In Progress</NavLink>
+              {isClient && <NavLink href="/inprogress">In Progress</NavLink>}
+              <NavLink href="/reports">Reports</NavLink>
               <NavLink href="/contact">Contact</NavLink>
             </div>
           </div>
@@ -168,14 +183,21 @@ export default function ResponsiveNavbar({ user }: { user: User }) {
               <NavLink href="/jobs" mobile>
                 Find Jobs
               </NavLink>
-              <NavLink href="/create" mobile>
-                Post Jobs
-              </NavLink>
+              {isClient && (
+                <NavLink href="/create" mobile>
+                  Post Jobs
+                </NavLink>
+              )}
               <NavLink href="/userjobs" mobile>
                 Your Jobs
               </NavLink>
-              <NavLink href="/inprogress" mobile>
-                In Progress
+              {isClient && (
+                <NavLink href="/inprogress" mobile>
+                  In Progress
+                </NavLink>
+              )}
+              <NavLink href="/reports" mobile>
+                Reports
               </NavLink>
               <NavLink href="/contact" mobile>
                 Contact

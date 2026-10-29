@@ -14,6 +14,7 @@ export type Job = {
   budget: number;
   deadline: Date;
   status: string;
+  client_id: number;
   client_name: string;
   skills_required: string[] | null[];
 };

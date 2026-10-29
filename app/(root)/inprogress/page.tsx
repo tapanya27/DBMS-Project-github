@@ -65,7 +65,7 @@ export default function InProgressPage() {
   });
   const completeMutation = useMutation({
     mutationFn: async (jobId: number) => {
-      const result = await completeJob(jobId);
+      const result = await completeJob(jobId, userDetails?.[0]?.user_id as number);
       return result;
     },
     onSuccess: () => {
@@ -103,6 +103,7 @@ export default function InProgressPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["feedback"] });
+      queryClient.invalidateQueries({ queryKey: ["postedJobs"] });
       toast({
         title: "Success",
         description: "Feedback submitted successfully",
