@@ -79,12 +79,13 @@ export function SignIn() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle className="text-2xl font-bold text-center">
-            Sign In
-          </CardTitle>
+    <div className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
+      <Card className="w-full max-w-md shadow-sm">
+        <CardHeader className="space-y-2 text-center">
+          <CardTitle className="text-2xl font-semibold">Sign in</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Access your Contractix account
+          </p>
         </CardHeader>
         <CardContent>
           <Form {...form}>

@@ -14,7 +14,6 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -35,7 +34,6 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { SelectItem } from "@/components/ui/select";
 import { useUser } from "@clerk/nextjs";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
@@ -159,19 +157,19 @@ export default function PostJobPage() {
   };
   if (isLoading || !isClient) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <Loader2 className="animate-spin w-10 h-10" />
+      <div className="flex min-h-[50vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto py-8">
-      <Card className="max-w-2xl mx-auto">
+    <div className="section-y page-container">
+      <Card className="mx-auto max-w-2xl">
         <CardHeader>
-          <CardTitle>Post a New Job</CardTitle>
+          <CardTitle>Post a job</CardTitle>
           <CardDescription>
-            Create a new job contract for freelancers
+            Add a clear title, budget, deadline, and required skills.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -185,13 +183,10 @@ export default function PostJobPage() {
                     <FormLabel>Job Title</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="e.g. Full Stack Developer needed for web app"
+                        placeholder="e.g. Full Stack Developer for web app"
                         {...field}
                       />
                     </FormControl>
-                    <FormDescription>
-                      Provide a clear and concise title for your job posting.
-                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -204,15 +199,11 @@ export default function PostJobPage() {
                     <FormLabel>Job Description</FormLabel>
                     <FormControl>
                       <Textarea
-                        placeholder="Describe the job requirements, responsibilities, and any other relevant details."
-                        className="resize-none"
+                        placeholder="Scope, requirements, and deliverables"
+                        className="min-h-[120px] resize-y"
                         {...field}
                       />
                     </FormControl>
-                    <FormDescription>
-                      Provide a detailed description of the job and its
-                      requirements.
-                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -226,9 +217,6 @@ export default function PostJobPage() {
                     <FormControl>
                       <Input type="number" placeholder="e.g. 5000" {...field} />
                     </FormControl>
-                    <FormDescription>
-                      Enter the budget for this job in USD.
-                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -245,7 +233,7 @@ export default function PostJobPage() {
                           <Button
                             variant={"outline"}
                             className={cn(
-                              "w-[240px] pl-3 text-left font-normal",
+                              "w-full pl-3 text-left font-normal sm:w-[240px]",
                               !field.value && "text-muted-foreground"
                             )}
                           >
@@ -270,9 +258,6 @@ export default function PostJobPage() {
                         />
                       </PopoverContent>
                     </Popover>
-                    <FormDescription>
-                      Select the deadline for project completion.
-                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -301,15 +286,16 @@ export default function PostJobPage() {
                         ))}
                       </div>
                     </FormControl>
-                    <FormDescription>
-                      Select the skills required for this job.
-                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              <Button type="submit" disabled={mutation.isPending}>
-                {mutation.isPending ? "Posting..." : "Post Job"}
+              <Button
+                type="submit"
+                className="w-full sm:w-auto"
+                disabled={mutation.isPending}
+              >
+                {mutation.isPending ? "Posting..." : "Post job"}
               </Button>
             </form>
           </Form>

@@ -311,9 +311,22 @@ BEGIN
   IF p_amount IS NULL OR p_amount <= 0 THEN
     RAISE EXCEPTION 'Bid amount must be positive';
   END IF;
+  IF EXISTS (
+    SELECT 1 FROM Bids
+    WHERE job_id = p_job_id
+      AND freelancer_id = p_actor
+      AND status = 'accepted'
+  ) THEN
+    RAISE EXCEPTION 'You already have an accepted bid on this job';
+  END IF;
+  -- Replace previous pending/rejected bids so freelancers can re-bid freely
+  DELETE FROM Bids
+  WHERE job_id = p_job_id
+    AND freelancer_id = p_actor
+    AND status IN ('pending', 'rejected');
   PERFORM set_config('app.user_id', p_actor::TEXT, true);
   INSERT INTO Bids (job_id, freelancer_id, bid_amount, status, created_at)
-  VALUES (p_job_id, p_actor, p_amount, 'pending', CURRENT_TIMESTAMP)
+  VALUES (p_job_id, p_actor, p_amount, 'pending', timezone('utc', now()))
   RETURNING bid_id INTO v_bid_id;
   RETURN v_bid_id;
 END;
@@ -519,5 +532,166 @@ BEGIN
   VALUES (p_job_id, p_from_user, p_to_user, p_rating)
   ON CONFLICT (job_id, from_user_id) DO UPDATE
   SET rating = EXCLUDED.rating, to_user_id = EXCLUDED.to_user_id;
+END;
+$$;
+
+CREATE TABLE IF NOT EXISTS Notifications (
+  notification_id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES Users(user_id) ON DELETE CASCADE,
+  type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  job_id INTEGER REFERENCES Jobs(job_id) ON DELETE SET NULL,
+  is_read BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT notifications_type_check CHECK (
+    type IN ('bid', 'bid_accepted', 'feedback', 'message')
+  )
+);
+
+CREATE TABLE IF NOT EXISTS Messages (
+  message_id SERIAL PRIMARY KEY,
+  job_id INTEGER NOT NULL REFERENCES Jobs(job_id) ON DELETE CASCADE,
+  sender_id INTEGER NOT NULL REFERENCES Users(user_id),
+  receiver_id INTEGER NOT NULL REFERENCES Users(user_id),
+  ciphertext TEXT NOT NULL,
+  iv TEXT NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS notifications_user_unread_idx
+  ON Notifications (user_id, is_read, created_at DESC);
+CREATE INDEX IF NOT EXISTS messages_job_created_idx
+  ON Messages (job_id, created_at);
+
+CREATE OR REPLACE FUNCTION notify_on_new_bid()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_client INTEGER;
+  v_title TEXT;
+  v_name TEXT;
+BEGIN
+  SELECT j.client_id, j.title INTO v_client, v_title
+  FROM Jobs j WHERE j.job_id = NEW.job_id;
+  SELECT name INTO v_name FROM Users WHERE user_id = NEW.freelancer_id;
+  INSERT INTO Notifications (user_id, type, title, body, job_id)
+  VALUES (
+    v_client,
+    'bid',
+    'New bid received',
+    COALESCE(v_name, 'A freelancer') || ' bid ' || NEW.bid_amount::text ||
+      ' on "' || COALESCE(v_title, 'your job') || '"',
+    NEW.job_id
+  );
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS bids_notify_insert ON Bids;
+CREATE TRIGGER bids_notify_insert
+AFTER INSERT ON Bids
+FOR EACH ROW
+EXECUTE FUNCTION notify_on_new_bid();
+
+CREATE OR REPLACE FUNCTION notify_on_bid_accepted()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_title TEXT;
+BEGIN
+  IF NEW.status = 'accepted' AND OLD.status IS DISTINCT FROM 'accepted' THEN
+    SELECT title INTO v_title FROM Jobs WHERE job_id = NEW.job_id;
+    INSERT INTO Notifications (user_id, type, title, body, job_id)
+    VALUES (
+      NEW.freelancer_id,
+      'bid_accepted',
+      'Bid accepted',
+      'Your bid was accepted for "' || COALESCE(v_title, 'a job') ||
+        '". You can now message the client.',
+      NEW.job_id
+    );
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS bids_notify_accepted ON Bids;
+CREATE TRIGGER bids_notify_accepted
+AFTER UPDATE ON Bids
+FOR EACH ROW
+EXECUTE FUNCTION notify_on_bid_accepted();
+
+CREATE OR REPLACE FUNCTION notify_on_feedback()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_title TEXT;
+BEGIN
+  SELECT title INTO v_title FROM Jobs WHERE job_id = NEW.job_id;
+  INSERT INTO Notifications (user_id, type, title, body, job_id)
+  VALUES (
+    NEW.to_user_id,
+    'feedback',
+    'New feedback',
+    'You received a rating of ' || NEW.rating::text ||
+      ' on "' || COALESCE(v_title, 'a job') || '"',
+    NEW.job_id
+  );
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS feedback_notify_insert ON Feedback;
+CREATE TRIGGER feedback_notify_insert
+AFTER INSERT ON Feedback
+FOR EACH ROW
+EXECUTE FUNCTION notify_on_feedback();
+
+CREATE OR REPLACE FUNCTION job_chat_participants(p_job_id INTEGER)
+RETURNS TABLE(client_id INTEGER, freelancer_id INTEGER, job_title TEXT, job_status TEXT)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    j.client_id,
+    b.freelancer_id,
+    j.title,
+    j.status
+  FROM Jobs j
+  JOIN Bids b ON b.job_id = j.job_id AND b.status = 'accepted'
+  WHERE j.job_id = p_job_id
+    AND j.status IN ('in progress', 'completed')
+  LIMIT 1;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION assert_can_message(
+  p_job_id INTEGER,
+  p_sender INTEGER,
+  p_receiver INTEGER
+) RETURNS VOID
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_client INTEGER;
+  v_freelancer INTEGER;
+BEGIN
+  SELECT client_id, freelancer_id
+  INTO v_client, v_freelancer
+  FROM job_chat_participants(p_job_id);
+  IF v_client IS NULL OR v_freelancer IS NULL THEN
+    RAISE EXCEPTION 'Messaging is only available after a bid is accepted';
+  END IF;
+  IF NOT (
+    (p_sender = v_client AND p_receiver = v_freelancer) OR
+    (p_sender = v_freelancer AND p_receiver = v_client)
+  ) THEN
+    RAISE EXCEPTION 'You can only message the other party on this job';
+  END IF;
 END;
 $$;

@@ -2,6 +2,7 @@
 
 import { requireClerkEmail, requireDbUser } from "@/lib/auth-user";
 import { getSql } from "@/lib/db";
+import { decryptMessage, encryptMessage } from "@/lib/message-crypto";
 
 export async function getJobs() {
   const sql = getSql();
@@ -34,7 +35,12 @@ export async function createUser(
 ) {
   const { email } = await requireClerkEmail();
   const sql = getSql();
-  const fullName = `${firstName} ${lastName}`.trim();
+  const fullName = [firstName, lastName]
+    .map((part) => (part ?? "").trim())
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
   const role = jobRole === "freelancer" ? "freelancer" : "client";
   const cleanSkills = (Array.isArray(skills) ? skills : []).filter(
     (skill): skill is string => typeof skill === "string" && skill.length > 0
@@ -70,10 +76,14 @@ export async function getJobById(jobId: number) {
       Users.name AS freelancer_name,
       Bids.bid_amount,
       Bids.status,
-      Bids.created_at
+      to_char(
+        Bids.created_at AT TIME ZONE 'UTC',
+        'YYYY-MM-DD"T"HH24:MI:SS"Z"'
+      ) AS created_at
     FROM Bids
     JOIN Users ON Bids.freelancer_id = Users.user_id
     WHERE Bids.job_id = ${jobId}
+    ORDER BY Bids.created_at DESC
   `;
 }
 
@@ -198,14 +208,22 @@ export async function getUserPostedJobs(userId: number) {
       j.budget,
       j.deadline,
       j.status AS job_status,
-      json_agg(
-        json_build_object(
-          'bid_id', b.bid_id,
-          'freelancer_id', b.freelancer_id,
-          'freelancer_name', u.name,
-          'bid_amount', b.bid_amount,
-          'status', b.status
-        )
+      COALESCE(
+        json_agg(
+          json_build_object(
+            'bid_id', b.bid_id,
+            'freelancer_id', b.freelancer_id,
+            'freelancer_name', u.name,
+            'bid_amount', b.bid_amount,
+            'status', b.status,
+            'created_at', to_char(
+              b.created_at AT TIME ZONE 'UTC',
+              'YYYY-MM-DD"T"HH24:MI:SS"Z"'
+            )
+          )
+          ORDER BY b.created_at DESC
+        ) FILTER (WHERE b.bid_id IS NOT NULL),
+        '[]'::json
       ) AS bids
     FROM Jobs j
     LEFT JOIN Bids b ON j.job_id = b.job_id
@@ -235,10 +253,14 @@ export async function updateUserDetails({
     (skill): skill is string => typeof skill === "string" && skill.length > 0
   );
   const cleanRole = role === "freelancer" ? "freelancer" : "client";
+  const cleanName = (name ?? "").trim().replace(/\s+/g, " ");
+  if (!cleanName) {
+    throw new Error("Name is required");
+  }
   try {
     await sql`
       UPDATE Users
-      SET name = ${name}, role = ${cleanRole}
+      SET name = ${cleanName}, role = ${cleanRole}
       WHERE user_id = ${me.user_id}
     `;
     await sql`SELECT replace_user_skills(${me.user_id}, ${cleanSkills})`;
@@ -306,4 +328,178 @@ export async function getAllFeedback() {
     FROM Feedback
     WHERE from_user_id = ${me.user_id} OR to_user_id = ${me.user_id}
   `;
+}
+
+export async function getNotifications() {
+  const me = await requireDbUser();
+  const sql = getSql();
+  return sql`
+    SELECT
+      notification_id,
+      type,
+      title,
+      body,
+      job_id,
+      is_read,
+      created_at
+    FROM Notifications
+    WHERE user_id = ${me.user_id}
+    ORDER BY created_at DESC
+    LIMIT 50
+  `;
+}
+
+export async function getUnreadNotificationCount() {
+  const me = await requireDbUser();
+  const sql = getSql();
+  const rows = await sql`
+    SELECT COUNT(*)::int AS count
+    FROM Notifications
+    WHERE user_id = ${me.user_id} AND is_read = FALSE
+  `;
+  return rows[0]?.count ?? 0;
+}
+
+export async function markNotificationsRead() {
+  const me = await requireDbUser();
+  const sql = getSql();
+  await sql`
+    UPDATE Notifications
+    SET is_read = TRUE
+    WHERE user_id = ${me.user_id} AND is_read = FALSE
+  `;
+  return { ok: true };
+}
+
+export async function getMessageThreads() {
+  const me = await requireDbUser();
+  const sql = getSql();
+  return sql`
+    SELECT
+      j.job_id,
+      j.title,
+      j.status,
+      j.client_id,
+      b.freelancer_id,
+      cu.name AS company_name,
+      fu.name AS freelancer_name,
+      CASE
+        WHEN j.client_id = ${me.user_id} THEN fu.name
+        ELSE cu.name
+      END AS other_party_name,
+      CASE
+        WHEN j.client_id = ${me.user_id} THEN b.freelancer_id
+        ELSE j.client_id
+      END AS other_party_id,
+      CASE
+        WHEN j.client_id = ${me.user_id} THEN 'client'
+        ELSE 'freelancer'
+      END AS my_role
+    FROM Jobs j
+    JOIN Bids b ON b.job_id = j.job_id AND b.status = 'accepted'
+    JOIN Users cu ON cu.user_id = j.client_id
+    JOIN Users fu ON fu.user_id = b.freelancer_id
+    WHERE j.status IN ('in progress', 'completed')
+      AND (j.client_id = ${me.user_id} OR b.freelancer_id = ${me.user_id})
+    ORDER BY j.job_id DESC
+  `;
+}
+
+export async function getJobMessages(jobId: number) {
+  const me = await requireDbUser();
+  const sql = getSql();
+  const participants = await sql`
+    SELECT client_id, freelancer_id, job_title, job_status
+    FROM job_chat_participants(${jobId})
+  `;
+  const chat = participants[0];
+  if (!chat) {
+    throw new Error("Messaging is only available after a bid is accepted");
+  }
+  if (
+    Number(me.user_id) !== Number(chat.client_id) &&
+    Number(me.user_id) !== Number(chat.freelancer_id)
+  ) {
+    throw new Error("Unauthorized");
+  }
+
+  const rows = await sql`
+    SELECT
+      m.message_id,
+      m.job_id,
+      m.sender_id,
+      m.receiver_id,
+      m.ciphertext,
+      m.iv,
+      to_char(
+        m.created_at AT TIME ZONE 'UTC',
+        'YYYY-MM-DD"T"HH24:MI:SS"Z"'
+      ) AS created_at,
+      u.name AS sender_name
+    FROM Messages m
+    JOIN Users u ON u.user_id = m.sender_id
+    WHERE m.job_id = ${jobId}
+      AND (m.sender_id = ${me.user_id} OR m.receiver_id = ${me.user_id})
+    ORDER BY m.created_at ASC
+  `;
+
+  return rows.map((row) => ({
+    message_id: row.message_id,
+    job_id: row.job_id,
+    sender_id: row.sender_id,
+    receiver_id: row.receiver_id,
+    sender_name: row.sender_name,
+    created_at: row.created_at,
+    body: decryptMessage(String(row.ciphertext), String(row.iv)),
+    mine: Number(row.sender_id) === Number(me.user_id),
+  }));
+}
+
+export async function sendJobMessage(jobId: number, body: string) {
+  const me = await requireDbUser();
+  const text = body.trim();
+  if (!text) {
+    throw new Error("Message cannot be empty");
+  }
+  if (text.length > 2000) {
+    throw new Error("Message is too long");
+  }
+
+  const sql = getSql();
+  const participants = await sql`
+    SELECT client_id, freelancer_id
+    FROM job_chat_participants(${jobId})
+  `;
+  const chat = participants[0];
+  if (!chat) {
+    throw new Error("Messaging is only available after a bid is accepted");
+  }
+
+  const receiverId =
+    Number(me.user_id) === Number(chat.client_id)
+      ? Number(chat.freelancer_id)
+      : Number(me.user_id) === Number(chat.freelancer_id)
+        ? Number(chat.client_id)
+        : null;
+  if (!receiverId) {
+    throw new Error("Unauthorized");
+  }
+
+  await sql`SELECT assert_can_message(${jobId}, ${me.user_id}, ${receiverId})`;
+  const encrypted = encryptMessage(text);
+  await sql`
+    INSERT INTO Messages (job_id, sender_id, receiver_id, ciphertext, iv)
+    VALUES (${jobId}, ${me.user_id}, ${receiverId}, ${encrypted.ciphertext}, ${encrypted.iv})
+  `;
+  await sql`
+    INSERT INTO Notifications (user_id, type, title, body, job_id)
+    VALUES (
+      ${receiverId},
+      'message',
+      'New encrypted message',
+      ${me.name + " sent you a message"},
+      ${jobId}
+    )
+  `;
+  return { ok: true };
 }

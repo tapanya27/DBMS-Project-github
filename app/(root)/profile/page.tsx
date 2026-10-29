@@ -30,7 +30,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { updateUserDetails } from "@/server";
 import { useToast } from "@/hooks/use-toast";
 
-// Mock available skills (replace with actual skill data in your app)
 const availableSkills = [
   "React",
   "Node.js",
@@ -138,12 +137,25 @@ export default function ProfilePage() {
       });
     }
   };
+  const normalizeName = (value: string) => {
+    const cleaned = (value ?? "").trim().replace(/\s+/g, " ");
+    const parts = cleaned.split(" ").filter(Boolean);
+    // Undo accidental "Name Name" duplication from older create flow
+    if (
+      parts.length === 2 &&
+      parts[0].toLowerCase() === parts[1].toLowerCase()
+    ) {
+      return parts[0];
+    }
+    return cleaned;
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (userData) {
       updateUserMutation.mutate({
         userId: userData.user_id,
-        name: userData.name,
+        name: normalizeName(userData.name),
         skills: userData.skills,
         role: userData.role,
       });
@@ -151,18 +163,12 @@ export default function ProfilePage() {
   };
   const createProfileMutation = useMutation({
     mutationFn: async () => {
-      const [firstName, ...rest] = setupName.trim().split(/\s+/);
+      const fullName = setupName.trim().replace(/\s+/g, " ");
       const email = user?.emailAddresses[0].emailAddress;
-      if (!email || !firstName || !setupRole) {
+      if (!email || !fullName || !setupRole) {
         throw new Error("Name, role, and email are required");
       }
-      return createUser(
-        firstName,
-        rest.join(" ") || firstName,
-        email,
-        setupSkills,
-        setupRole
-      );
+      return createUser(fullName, "", email, setupSkills, setupRole);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["user"] });
@@ -179,21 +185,21 @@ export default function ProfilePage() {
 
   if (isLoading || (data?.[0] && userdataLoading)) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <Loader2 className="animate-spin w-10 h-10" />
+      <div className="flex min-h-[50vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   if (!data?.[0]) {
     return (
-      <div className="container mx-auto py-8">
-        <Card className="max-w-2xl mx-auto">
+      <div className="section-y page-container">
+        <Card className="mx-auto max-w-2xl">
           <CardHeader>
             <CardTitle>Choose your role</CardTitle>
             <CardDescription>
-              Sign-in only checks your email. Client or freelancer is stored
-              in this app, and you pick it here.
+              Pick client or freelancer to finish setup. This is stored in the
+              app database, not in Clerk.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -282,12 +288,12 @@ export default function ProfilePage() {
     );
   }
   return (
-    <div className="container mx-auto py-8">
-      <Card className="max-w-2xl mx-auto">
+    <div className="section-y page-container">
+      <Card className="mx-auto max-w-2xl">
         <CardHeader>
-          <CardTitle>Your Profile</CardTitle>
+          <CardTitle>Profile</CardTitle>
           <CardDescription>
-            View and edit your profile information
+            Update your name, role, and skills.
           </CardDescription>
         </CardHeader>
         <CardContent>

@@ -54,6 +54,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
+import { formatDateTime } from "@/lib/datetime";
 const PageJob = () => {
   const { user } = useUser();
   const { id } = useParams();
@@ -243,73 +244,81 @@ const PageJob = () => {
   };
   if (isLoading || isLoadingUserDetails) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <Loader2 className="animate-spin w-10 h-10" />
+      <div className="flex min-h-[50vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   return (
-    <div>
-      <div className="min-h-screen bg-background py-12 px-4">
-        <div className="container mx-auto">
-          <Card className="max-w-3xl mx-auto">
-            <CardHeader>
-              <CardTitle className="text-3xl">{job?.title}</CardTitle>
+    <div className="section-y page-container">
+        <div className="mx-auto flex max-w-3xl flex-col gap-4">
+          <Card>
+            <CardHeader className="space-y-3">
+              <CardTitle className="text-2xl break-words-safe sm:text-3xl">
+                {job?.title}
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Posted by {job?.client_name}
+              </p>
             </CardHeader>
             <CardContent className="space-y-4">
-              <p className="text-muted-foreground">{job?.description}</p>
+              <p className="text-muted-foreground break-words-safe">
+                {job?.description}
+              </p>
               <div>
-                <h3 className="font-semibold mb-2">Required Skills:</h3>
-                <div className="flex flex-wrap gap-2">
-                  {job?.skills_required.map((skill, index) => (
+                <h3 className="mb-2 text-sm font-medium">Skills</h3>
+                <div className="flex flex-wrap gap-1.5">
+                  {(job?.skills_required ?? []).filter(Boolean).map((skill, index) => (
                     <Badge key={index} variant="secondary">
                       {skill}
                     </Badge>
                   ))}
                 </div>
               </div>
-              <div>
-                <p className="font-semibold">Budget: {job?.budget}</p>
-                <p className="text-sm text-muted-foreground">
-                  Deadline: {job?.deadline.toLocaleDateString()}
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                <p className="font-medium">Budget · {job?.budget}</p>
+                <p className="text-muted-foreground">
+                  Due{" "}
+                  {job?.deadline
+                    ? new Date(job.deadline).toLocaleDateString()
+                    : "—"}
                 </p>
               </div>
-              <p className="text-sm text-muted-foreground">
-                Posted by: {job?.client_name}
-              </p>
             </CardContent>
             <CardFooter>
               {isJobOwner ? (
                 <Button className="w-full" onClick={handleApplyClick} disabled>
-                  You can't apply to your own job
+                  You can&apos;t apply to your own job
                 </Button>
               ) : job?.status === "in progress" ? (
                 <Button className="w-full" disabled>
-                  This job is already in progress. You can't apply to it.
+                  Job already in progress
                 </Button>
               ) : job?.status === "completed" ? (
                 <Button className="w-full" disabled>
-                  Job completed.
+                  Job completed
                 </Button>
               ) : (
                 <Button className="w-full" onClick={handleApplyClick}>
-                  Apply for this Job
+                  Apply for this job
                 </Button>
               )}
             </CardFooter>
           </Card>
-          <Card className="max-w-3xl mx-auto">
+          <Card>
             <CardHeader>
-              <CardTitle className="text-2xl">Job Bids</CardTitle>
+              <CardTitle className="text-xl">Bids</CardTitle>
             </CardHeader>
             <CardContent>
               {bids && bids.length > 0 ? (
+                <div className="overflow-x-auto rounded-lg border">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Bidder</TableHead>
                       <TableHead>Amount</TableHead>
+                      <TableHead>Submitted</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Action</TableHead>
                     </TableRow>
@@ -319,6 +328,9 @@ const PageJob = () => {
                       <TableRow key={bid.bid_id}>
                         <TableCell>{bid.freelancer_name}</TableCell>
                         <TableCell>{bid.bid_amount}</TableCell>
+                        <TableCell className="whitespace-nowrap text-muted-foreground">
+                          {formatDateTime(bid.created_at)}
+                        </TableCell>
                         <TableCell>
                           <Badge
                             variant={
@@ -329,12 +341,12 @@ const PageJob = () => {
                           </Badge>
                         </TableCell>
                         <TableCell>
+                          <div className="flex flex-wrap items-center gap-2">
                           {isJobOwner && bid.status === "pending" && (
                             <>
                               <Button
                                 variant="outline"
                                 size="sm"
-                                className="mr-2"
                                 onClick={() => acceptMutation.mutate(bid.bid_id)}
                               >
                                 Accept
@@ -356,7 +368,6 @@ const PageJob = () => {
                                   size="sm"
                                   onClick={() => {
                                     setDeletingBidId(bid.bid_id);
-                                    console.log(deletingBidId);
                                   }}
                                 >
                                   <Trash2 className="h-4 w-4" />
@@ -366,22 +377,22 @@ const PageJob = () => {
                                   size="sm"
                                   onClick={() => {
                                     setEditingBidId(bid.bid_id);
-                                    console.log(editingBidId);
                                   }}
-                                  className="ml-2"
                                 >
                                   <Edit className="h-4 w-4" />
                                 </Button>
                               </>
                             )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
+                </div>
               ) : (
-                <p className="text-center text-muted-foreground">
-                  No bids have been placed for this job yet.
+                <p className="text-center text-sm text-muted-foreground">
+                  No bids yet.
                 </p>
               )}
             </CardContent>
@@ -415,31 +426,28 @@ const PageJob = () => {
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleBidSubmit}>
-              <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="bid-amount" className="text-right">
-                    Bid Amount ($)
-                  </Label>
-                  <Input
-                    id="bid-amount"
-                    type="number"
-                    value={bidAmount}
-                    onChange={(e) => setBidAmount(e.target.value)}
-                    className="col-span-3"
-                    placeholder="Enter your bid amount"
-                    min="1"
-                    step="1"
-                    required
-                  />
-                </div>
+              <div className="space-y-2 py-4">
+                <Label htmlFor="bid-amount">Bid amount ($)</Label>
+                <Input
+                  id="bid-amount"
+                  type="number"
+                  value={bidAmount}
+                  onChange={(e) => setBidAmount(e.target.value)}
+                  placeholder="Enter your bid amount"
+                  min="1"
+                  step="1"
+                  required
+                />
               </div>
               <DialogFooter>
-                <Button type="submit">Submit Bid</Button>
+                <Button type="submit" className="w-full sm:w-auto">
+                  Submit bid
+                </Button>
               </DialogFooter>
             </form>
           </DialogContent>
         </Dialog>
-      </div>
+
       <AlertDialog
         open={deletingBidId !== null}
         onOpenChange={() => setDeletingBidId(null)}
@@ -474,26 +482,23 @@ const PageJob = () => {
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleEditBidSubmit}>
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="edit-bid-amount" className="text-right">
-                  New Bid Amount ($)
-                </Label>
-                <Input
-                  id="edit-bid-amount"
-                  type="number"
-                  value={editBidAmount}
-                  onChange={(e) => setEditBidAmount(e.target.value)}
-                  className="col-span-3"
-                  placeholder="Enter new bid amount"
-                  min="1"
-                  step="1"
-                  required
-                />
-              </div>
+            <div className="space-y-2 py-4">
+              <Label htmlFor="edit-bid-amount">New bid amount ($)</Label>
+              <Input
+                id="edit-bid-amount"
+                type="number"
+                value={editBidAmount}
+                onChange={(e) => setEditBidAmount(e.target.value)}
+                placeholder="Enter new bid amount"
+                min="1"
+                step="1"
+                required
+              />
             </div>
             <DialogFooter>
-              <Button type="submit">Update Bid</Button>
+              <Button type="submit" className="w-full sm:w-auto">
+                Update bid
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>

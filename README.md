@@ -86,3 +86,10 @@ Open **Reports** after you have at least one posted job and one bid.
 - Mutations require a Clerk session.
 - Server actions resolve the DB user from the signed-in email. Client-supplied user IDs are not trusted.
 - Ownership and role checks also run inside Postgres functions (`accept_bid`, `create_bid`, `complete_job`, and related).
+
+## Messaging and notifications
+
+- **Messages** (`/messages`): available only after a bid is accepted (client ↔ accepted freelancer). Bodies are encrypted with AES-256-GCM before insert (`ciphertext` + `iv` columns). Set `MESSAGE_ENCRYPTION_KEY` in `.env.local`.
+- **Notifications**: DB triggers create rows when someone bids, a bid is accepted, or feedback is saved. The navbar bell shows unread items.
+
+Demo: accept a bid → freelancer gets a notification → both open **Messages** → send a note → confirm `Messages.ciphertext` is not readable plaintext in Neon.

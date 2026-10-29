@@ -1,4 +1,10 @@
+"use client";
+
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
+import { User } from "@clerk/nextjs/server";
+
 import {
   Card,
   CardContent,
@@ -7,222 +13,134 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { useQuery } from "@tanstack/react-query";
-import { Job } from "@/types";
+import { Button } from "@/components/ui/button";
+import { EmptyState, PageShell } from "@/components/page-shell";
 import { getJobs } from "@/server";
-import { Loader2 } from "lucide-react";
-import { User } from "@clerk/nextjs/server";
-import WordPullUp from "./ui/word-pull-up";
-import LetterPullup from "./ui/letter-pullup";
-import SlightFlip from "./ui/flip-text";
-import BlurIn from "./ui/blur-in";
+import { Job } from "@/types";
 
 export default function AppPage({ user }: { user: User }) {
   const { data, isLoading } = useQuery<Job[]>({
     queryKey: ["jobs"],
-    queryFn: async () => {
-      const result = await getJobs();
-      return result as Job[];
-    },
+    queryFn: async () => (await getJobs()) as Job[],
   });
-  const jobs = data?.slice(0, 6);
+
+  const jobs = (data ?? []).filter((job) => job.status === "open").slice(0, 6);
+
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center h-screen">
-        <Loader2 className="w-10 h-10 animate-spin" />
+      <div className="flex min-h-[50vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
+
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <main className="flex-grow">
-        {/* Hero Section */}
-        <section className="bg-primary text-primary-foreground py-20 px-4">
-          <div className="container mx-auto text-center">
-            <WordPullUp
-              words="Welcome to Contractix"
-              className="text-6xl md:text-5xl font-bold mb-4"
-            />
-
-            <BlurIn
-              word="A job marketplace to find freelance jobs"
-              className="text-xl md:text-2xl mb-8 dark:text-black"
-              duration={0.5}
-            />
-
-            <Link
-              href="/jobs"
-              className="bg-background text-primary hover:bg-background/90 px-6 py-3 rounded-md font-semibold transition-colors duration-200"
-            >
-              Browse Jobs
-            </Link>
-          </div>
-        </section>
-        <section className="py-16 px-4">
-          <div className="container mx-auto">
-            <h2 className="text-2xl md:text-3xl font-bold mb-8 text-center">
-              Featured Jobs
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {jobs?.map((job) =>
-                job.status === "open" ? (
-                  <Card key={job.job_id} className="flex flex-col">
-                    <CardHeader>
-                      <CardTitle>{job.title}</CardTitle>
-                    </CardHeader>
-                    <CardContent className="flex-grow">
-                      <p className="text-muted-foreground mb-4">
-                        {job.description}
-                      </p>
-                      <p className="font-semibold">Budget: {job.budget}</p>
-                    </CardContent>
-                    <CardFooter className="flex flex-col items-start">
-                      <p className="text-sm text-muted-foreground mb-2">
-                        Posted by: {job.client_name}
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        {job.skills_required?.map((skill, index) => (
-                          <Badge key={index} variant="secondary">
-                            {skill || "No skills required"}
-                          </Badge>
-                        ))}
-                      </div>
-                    </CardFooter>
-                  </Card>
-                ) : null
+    <div className="flex min-h-screen flex-col">
+      <section className="border-b bg-muted/40">
+        <PageShell className="py-14 sm:py-20">
+          <div className="mx-auto max-w-2xl text-center">
+            <p className="mb-3 text-sm font-medium text-primary">Contractix</p>
+            <h1 className="text-3xl font-semibold sm:text-4xl lg:text-5xl">
+              Hire freelancers or find contract work
+            </h1>
+            <p className="mt-4 text-base text-muted-foreground sm:text-lg">
+              Post jobs, place bids, track progress, and leave feedback in one
+              place.
+            </p>
+            <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+              <Button asChild size="lg">
+                <Link href="/jobs">Browse jobs</Link>
+              </Button>
+              {user ? (
+                <Button asChild variant="outline" size="lg">
+                  <Link href="/userjobs">Go to dashboard</Link>
+                </Button>
+              ) : (
+                <Button asChild variant="outline" size="lg">
+                  <Link href="/sign-in">Sign in</Link>
+                </Button>
               )}
             </div>
           </div>
-        </section>
-      </main>
+        </PageShell>
+      </section>
 
-      {/* Footer */}
-      <footer className="bg-muted text-muted-foreground py-12 px-4">
-        <div className="container mx-auto">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            <div>
-              <h3 className="font-semibold text-lg mb-4">Company</h3>
-              <ul className="space-y-2">
-                <li>
-                  <Link
-                    href="/about"
-                    className="hover:text-primary transition-colors"
-                  >
-                    About
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/contact"
-                    className="hover:text-primary transition-colors"
-                  >
-                    Contact
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/"
-                    className="hover:text-primary transition-colors"
-                  >
-                    Careers
-                  </Link>
-                </li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="font-semibold text-lg mb-4">For Freelancers</h3>
-              <ul className="space-y-2">
-                <li>
-                  <Link
-                    href="/jobs"
-                    className="hover:text-primary transition-colors"
-                  >
-                    Find Jobs
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/profile"
-                    className="hover:text-primary transition-colors"
-                  >
-                    Create Profile
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/"
-                    className="hover:text-primary transition-colors"
-                  >
-                    Resources
-                  </Link>
-                </li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="font-semibold text-lg mb-4">For Clients</h3>
-              <ul className="space-y-2">
-                <li>
-                  <Link
-                    href="/create"
-                    className="hover:text-primary transition-colors"
-                  >
-                    Post Jobs
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/jobs"
-                    className="hover:text-primary transition-colors"
-                  >
-                    Find Freelancers
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/"
-                    className="hover:text-primary transition-colors"
-                  >
-                    Resources
-                  </Link>
-                </li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="font-semibold text-lg mb-4">Legal</h3>
-              <ul className="space-y-2">
-                <li>
-                  <Link
-                    href="/"
-                    className="hover:text-primary transition-colors"
-                  >
-                    Privacy Policy
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/"
-                    className="hover:text-primary transition-colors"
-                  >
-                    Terms of Service
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/"
-                    className="hover:text-primary transition-colors"
-                  >
-                    Cookie Policy
-                  </Link>
-                </li>
-              </ul>
-            </div>
-          </div>
-          <div className="mt-12 pt-8 border-t border-muted-foreground/20 text-center">
-            <p>
-              &copy; {new Date().getFullYear()} Contractix. All rights reserved.
+      <PageShell>
+        <div className="mb-6 flex items-end justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-semibold sm:text-2xl">Open jobs</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Recent listings available for bids
             </p>
           </div>
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/jobs">View all</Link>
+          </Button>
         </div>
+
+        {jobs.length === 0 ? (
+          <EmptyState
+            title="No open jobs yet"
+            description="Check back soon or post a job if you are a client."
+          />
+        ) : (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {jobs.map((job) => (
+              <Card key={job.job_id} className="flex flex-col transition-shadow hover:shadow-md">
+                <CardHeader className="space-y-2">
+                  <CardTitle className="line-clamp-2 text-lg break-words-safe">
+                    {job.title}
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    {job.client_name}
+                  </p>
+                </CardHeader>
+                <CardContent className="flex-1 space-y-4">
+                  <p className="line-clamp-3 text-sm text-muted-foreground break-words-safe">
+                    {job.description}
+                  </p>
+                  <p className="text-sm font-medium">Budget · {job.budget}</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(job.skills_required ?? [])
+                      .filter(Boolean)
+                      .slice(0, 4)
+                      .map((skill, index) => (
+                        <Badge key={`${skill}-${index}`} variant="secondary">
+                          {skill}
+                        </Badge>
+                      ))}
+                  </div>
+                </CardContent>
+                <CardFooter>
+                  <Button asChild variant="outline" className="w-full">
+                    <Link href={`/jobs/${job.job_id}`}>View job</Link>
+                  </Button>
+                </CardFooter>
+              </Card>
+            ))}
+          </div>
+        )}
+      </PageShell>
+
+      <footer className="mt-auto border-t">
+        <PageShell className="py-8">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted-foreground">
+              © {new Date().getFullYear()} Contractix
+            </p>
+            <div className="flex flex-wrap gap-4 text-sm">
+              <Link href="/about" className="text-muted-foreground hover:text-foreground">
+                About
+              </Link>
+              <Link href="/contact" className="text-muted-foreground hover:text-foreground">
+                Contact
+              </Link>
+              <Link href="/jobs" className="text-muted-foreground hover:text-foreground">
+                Jobs
+              </Link>
+            </div>
+          </div>
+        </PageShell>
       </footer>
     </div>
   );

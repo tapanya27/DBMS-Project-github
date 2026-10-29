@@ -31,6 +31,7 @@ import {
 } from "@/server";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
+import { formatDateTime } from "@/lib/datetime";
 
 export default function InProgressPage() {
   const [selectedJob, setSelectedJob] = useState<any>(null);
@@ -127,86 +128,112 @@ export default function InProgressPage() {
     setIsFeedbackModalOpen(true);
   };
 
+  const activeJobs =
+    postedJobs?.filter(
+      (job) =>
+        job.job_status === "in progress" || job.job_status === "completed"
+    ) ?? [];
+
   if (userDetailsLoading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <Loader2 className="animate-spin w-10 h-10" />
+      <div className="flex min-h-[50vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <section className="bg-primary text-primary-foreground py-20 px-4">
-        <div className="container mx-auto text-center">
-          <h1 className="text-4xl md:text-5xl font-bold mb-4">
-            Jobs In Progress
-          </h1>
-          <p className="text-xl md:text-2xl mb-8">
-            Monitor and manage your ongoing projects
-          </p>
-        </div>
-      </section>
-
-      <section className="py-12 px-4">
-        <div className="container mx-auto">
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {postedJobs?.map(
-              (job) =>
-                (job.job_status === "in progress" ||
-                  job.job_status === "completed") && (
-                  <Card key={job.job_id}>
-                    <CardHeader>
-                      <CardTitle>{job.title}</CardTitle>
-                      <CardDescription>
-                        Freelancer:{" "}
-                        {
-                          job?.bids?.filter(
-                            (bid: any) => bid.status === "accepted"
-                          )[0]?.freelancer_name
-                        }
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <p>
-                        <strong>Deadline:</strong>{" "}
-                        {job.deadline.toLocaleDateString()}
-                      </p>
-                      <p>
-                        <strong>Budget:</strong> {job.budget}
-                      </p>
-                      <p className="mt-2">{job.description}</p>
-                    </CardContent>
-                    <CardFooter className="flex justify-between">
-                      {job.job_status === "in progress" ? (
-                        <Button
-                          variant="outline"
-                          onClick={() => handleOpenCompleteDialog(job)}
-                        >
-                          Complete Job
-                        </Button>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <h1>Job has been completed</h1>
-                          <CheckCircle className="w-6 h-6 text-green-500" />
-                        </div>
-                      )}
-                      {feedback?.filter(
-                        (feedback) => feedback.job_id === job.job_id
-                      ).length === 0 ? (
-                        <Button onClick={() => handleOpenFeedback(job)}>
-                          Give Feedback
-                        </Button>
-                      ) : (
-                        <h1>Feedback already given</h1>
-                      )}
-                    </CardFooter>
-                  </Card>
-                )
-            )}
+    <div className="section-y page-container">
+      <div className="mb-8 space-y-2 sm:mb-10">
+        <h1 className="text-2xl font-semibold sm:text-3xl">In progress</h1>
+        <p className="text-sm text-muted-foreground sm:text-base">
+          Complete work, message freelancers, and leave feedback.
+        </p>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {activeJobs.length === 0 ? (
+          <div className="col-span-full rounded-xl border border-dashed bg-muted/30 px-6 py-12 text-center">
+            <p className="font-medium">No active jobs</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Accept a bid to move a job here.
+            </p>
           </div>
-        </div>
-      </section>
+        ) : null}
+        {activeJobs.map((job) => (
+          <Card key={job.job_id} className="flex flex-col">
+            <CardHeader className="space-y-2">
+              <CardTitle className="text-lg break-words-safe">
+                {job.title}
+              </CardTitle>
+              <CardDescription>
+                {
+                  job?.bids?.filter(
+                    (bid: any) => bid.status === "accepted"
+                  )[0]?.freelancer_name
+                }
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex-1 space-y-2 text-sm">
+              <p>
+                Due{" "}
+                {job.deadline
+                  ? new Date(job.deadline).toLocaleDateString()
+                  : "—"}
+              </p>
+              <p>Budget · {job.budget}</p>
+              <p className="font-medium">
+                Accepted bid ·{" "}
+                {
+                  job?.bids?.filter(
+                    (bid: any) => bid.status === "accepted"
+                  )[0]?.bid_amount ?? "—"
+                }
+              </p>
+              <p className="text-muted-foreground">
+                Bid placed{" "}
+                {formatDateTime(
+                  job?.bids?.find((bid: any) => bid.status === "accepted")
+                    ?.created_at
+                )}
+              </p>
+              <p className="line-clamp-3 text-muted-foreground break-words-safe">
+                {job.description}
+              </p>
+            </CardContent>
+            <CardFooter className="flex flex-wrap gap-2">
+              {job.job_status === "in progress" ? (
+                <Button
+                  variant="outline"
+                  onClick={() => handleOpenCompleteDialog(job)}
+                >
+                  Complete
+                </Button>
+              ) : (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <CheckCircle className="h-4 w-4 text-emerald-500" />
+                  Completed
+                </div>
+              )}
+              <Button
+                variant="secondary"
+                onClick={() => router.push(`/messages?job=${job.job_id}`)}
+              >
+                Message
+              </Button>
+              {feedback?.filter((item) => item.job_id === job.job_id)
+                .length === 0 ? (
+                <Button onClick={() => handleOpenFeedback(job)}>
+                  Feedback
+                </Button>
+              ) : (
+                <span className="self-center text-sm text-muted-foreground">
+                  Feedback sent
+                </span>
+              )}
+            </CardFooter>
+          </Card>
+        ))}
+      </div>
       <Dialog open={isCompleteModalOpen} onOpenChange={setIsCompleteModalOpen}>
         <DialogContent>
           <DialogHeader>

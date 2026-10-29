@@ -11,7 +11,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -37,10 +36,17 @@ import {
   getUserPostedJobs,
   rejectBid,
 } from "@/server";
-import { Loader, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useUser } from "@clerk/nextjs";
 import { Bid, Feedback, JobBids, User, userBids } from "@/types";
 import { toast } from "@/hooks/use-toast";
+import {
+  EmptyState,
+  PageHeader,
+  PageShell,
+  StatusBadge,
+} from "@/components/page-shell";
+import { formatDateTime } from "@/lib/datetime";
 
 export default function UserJobsPage() {
   const [selectedJob, setSelectedJob] = useState<any>(null);
@@ -146,72 +152,69 @@ export default function UserJobsPage() {
       setActiveTab(userDetails[0].role === "freelancer" ? "applied" : "posted");
     }
   }, [userDetails]);
+  const role = userDetails?.[0]?.role;
+  const isFreelancer = role === "freelancer";
+
   if (userDetailsLoading)
     return (
-      <div className="flex justify-center items-center h-screen">
-        <Loader className="animate-spin w-10 h-10" />
+      <div className="flex min-h-[50vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   return (
-    <div className="min-h-screen bg-background">
-      {/* Hero Section */}
-      <section className="bg-primary text-primary-foreground py-20 px-4">
-        <div className="container mx-auto text-center">
-          <h1 className="text-4xl md:text-5xl font-bold mb-4">
-            Your Job Dashboard
-          </h1>
-          <p className="text-xl md:text-2xl mb-8">
-            {userDetails?.[0]?.role === "freelancer"
-              ? "Manage your job applications and postings"
-              : "Manage your job postings"}
-          </p>
-        </div>
-      </section>
-
-      {/* Job Listings */}
-      <section className="py-12 px-4">
-        <div className="container mx-auto">
-          <Tabs
-            value={activeTab}
-            onValueChange={setActiveTab}
-            className="w-full"
-          >
-            <TabsList className="grid w-full grid-cols-2">
-              {userDetails?.[0]?.role === "freelancer" && (
-                <TabsTrigger value="applied">Applied Jobs</TabsTrigger>
+    <PageShell>
+      <PageHeader
+        title="Dashboard"
+        description={
+          isFreelancer
+            ? "Track applications, bid status, and client feedback."
+            : "Manage posted jobs and review bids."
+        }
+      />
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsList
+              className={`grid w-full ${
+                isFreelancer ? "grid-cols-2" : "grid-cols-1 max-w-xs"
+              }`}
+            >
+              {isFreelancer && (
+                <TabsTrigger value="applied">Applied</TabsTrigger>
               )}
-              <TabsTrigger value="posted">Posted Jobs</TabsTrigger>
+              <TabsTrigger value="posted">
+                {isFreelancer ? "Posted" : "My jobs"}
+              </TabsTrigger>
             </TabsList>
-            {userDetails?.[0]?.role === "freelancer" && (
-              <TabsContent value="applied">
+            {isFreelancer && (
+              <TabsContent value="applied" className="mt-6">
                 {isLoading ? (
-                  <div className="flex justify-center items-center h-40">
-                    <Loader2 className="animate-spin w-8 h-8" />
+                  <div className="flex h-40 items-center justify-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                   </div>
                 ) : data && data.length > 0 ? (
-                  <div className="grid gap-6 mt-6">
+                  <div className="grid gap-4 md:grid-cols-2">
                     {data.map((job: userBids) => (
                       <Card key={job.job_id}>
-                        <CardHeader>
-                          <CardTitle>{job.title}</CardTitle>
+                        <CardHeader className="space-y-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <CardTitle className="text-lg break-words-safe">
+                              {job.title}
+                            </CardTitle>
+                            <StatusBadge status={job.bid_status || "pending"} />
+                          </div>
                           <CardDescription>
-                            Application Status:{" "}
-                            {job.bid_status && job.bid_status.toUpperCase()}
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                          <p>
-                            <strong>Budget:</strong> {job.budget}
-                          </p>
-                          <p>
-                            <strong>Deadline:</strong>{" "}
-                            {job.deadline.toLocaleDateString()}
-                          </p>
-                          <p>
-                            <strong>Client feedback:</strong>{" "}
+                            Feedback:{" "}
                             {feedbackFor(job.job_id)
                               ? `${feedbackFor(job.job_id)?.rating} / 5`
-                              : "No feedback yet"}
+                              : "None yet"}
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-1 text-sm">
+                          <p>Budget · {job.budget}</p>
+                          <p className="text-muted-foreground">
+                            Due{" "}
+                            {job.deadline
+                              ? new Date(job.deadline).toLocaleDateString()
+                              : "—"}
                           </p>
                         </CardContent>
                         <CardFooter>
@@ -219,49 +222,60 @@ export default function UserJobsPage() {
                             variant="outline"
                             onClick={() => handleViewJob(job)}
                           >
-                            View Details
+                            Details
                           </Button>
                         </CardFooter>
                       </Card>
                     ))}
                   </div>
                 ) : (
-                  <div className="text-center mt-6">
-                    <p>No applied jobs found.</p>
-                  </div>
+                  <EmptyState
+                    title="No applications yet"
+                    description="Browse open jobs and place a bid to get started."
+                  />
                 )}
               </TabsContent>
             )}
-            <TabsContent value="posted">
-              <div className="grid gap-6 mt-6">
-                {postedJobs &&
-                  postedJobs.map((job) => (
+            <TabsContent value="posted" className="mt-6">
+              {isPostedJobsLoading ? (
+                <div className="flex h-40 items-center justify-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : postedJobs && postedJobs.length > 0 ? (
+                <div className="grid gap-4 md:grid-cols-2">
+                  {postedJobs.map((job) => (
                     <Card key={job.job_id}>
-                      <CardHeader>
-                        <CardTitle>{job.title}</CardTitle>
-                        <CardDescription className="flex items-center gap-2">
-                          Status:{" "}
-                          <Badge
-                            variant={
-                              job.job_status === "open"
-                                ? "default"
-                                : "secondary"
-                            }
-                          >
-                            {job.job_status.toUpperCase()}
-                          </Badge>
+                      <CardHeader className="space-y-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <CardTitle className="text-lg break-words-safe">
+                            {job.title}
+                          </CardTitle>
+                          <StatusBadge status={job.job_status} />
+                        </div>
+                        <CardDescription>
+                          {(job.bids ?? []).filter(Boolean).length} bid
+                          {(job.bids ?? []).filter(Boolean).length === 1
+                            ? ""
+                            : "s"}
                         </CardDescription>
                       </CardHeader>
-                      <CardContent>
-                        <p>
-                          <strong>Budget:</strong> {job.budget}
-                        </p>
-                        <p>
-                          <strong>Deadline:</strong>{" "}
-                          {job.deadline.toLocaleDateString()}
-                        </p>
-                        <p>
-                          <strong>Applicants:</strong> {job.bids.length}
+                      <CardContent className="space-y-1 text-sm">
+                        <p>Budget · {job.budget}</p>
+                        {(() => {
+                          const accepted = (job.bids ?? []).find(
+                            (bid: Bid) => bid?.status === "accepted"
+                          );
+                          return accepted ? (
+                            <p className="font-medium">
+                              Accepted bid · {accepted.bid_amount}
+                            </p>
+                          ) : null;
+                        })()}
+                        <p className="text-muted-foreground">
+                          Due{" "}
+                          {job.deadline
+                            ? new Date(job.deadline).toLocaleDateString()
+                            : "—"}
                         </p>
                       </CardContent>
                       <CardFooter>
@@ -269,48 +283,56 @@ export default function UserJobsPage() {
                           variant="outline"
                           onClick={() => handleManageJob(job)}
                         >
-                          Manage Job
+                          Manage bids
                         </Button>
                       </CardFooter>
                     </Card>
                   ))}
-              </div>
+                </div>
+              ) : (
+                <EmptyState
+                  title="No posted jobs"
+                  description={
+                    isFreelancer
+                      ? "Switch to a client role to post jobs."
+                      : "Post a job to start receiving bids."
+                  }
+                />
+              )}
             </TabsContent>
           </Tabs>
-        </div>
-      </section>
 
       <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>{selectedJob?.title}</DialogTitle>
-            <DialogDescription>Job Details</DialogDescription>
+            <DialogTitle className="break-words-safe">
+              {selectedJob?.title}
+            </DialogTitle>
+            <DialogDescription>Application details</DialogDescription>
           </DialogHeader>
-          <div className="mt-4 flex flex-col gap-2">
-            <p>
-              <strong>Description:</strong> {selectedJob?.description}
+          <div className="mt-2 space-y-3 text-sm">
+            <p className="break-words-safe text-muted-foreground">
+              {selectedJob?.description}
+            </p>
+            <p>Budget · {selectedJob?.budget}</p>
+            <p className="text-muted-foreground">
+              Due{" "}
+              {selectedJob?.deadline
+                ? new Date(selectedJob.deadline).toLocaleDateString()
+                : "—"}
             </p>
             <p>
-              <strong>Budget:</strong> {selectedJob?.budget}
+              Bid status ·{" "}
+              {selectedJob?.bid_status ? selectedJob.bid_status : "Pending"}
             </p>
+            <p>Your bid · {selectedJob?.bid_amount}</p>
             <p>
-              <strong>Deadline:</strong>{" "}
-              {selectedJob?.deadline.toLocaleDateString()}
-            </p>
-            <p>
-              <strong>Status:</strong>{" "}
-              {selectedJob?.bid_status ? selectedJob?.bid_status : "Pending"}
-            </p>
-            <p>
-              <strong>Your Bid Amount:</strong> {selectedJob?.bid_amount}
-            </p>
-            <p>
-              <strong>Client feedback:</strong>{" "}
+              Client feedback ·{" "}
               {selectedJob
                 ? feedbackFor(selectedJob.job_id)
                   ? `${feedbackFor(selectedJob.job_id)?.rating} / 5`
-                  : "No feedback yet"
-                : "No feedback yet"}
+                  : "None yet"
+                : "None yet"}
             </p>
           </div>
         </DialogContent>
@@ -318,68 +340,74 @@ export default function UserJobsPage() {
 
       {/* Manage Job Modal */}
       <Dialog open={isManageModalOpen} onOpenChange={setIsManageModalOpen}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{selectedJob?.title}</DialogTitle>
-            <DialogDescription>Manage Job Bids</DialogDescription>
+            <DialogDescription>Review and act on bids</DialogDescription>
           </DialogHeader>
-          <div className="mt-4">
-            <p>
-              <strong>Description:</strong> {selectedJob?.description}
+          <div className="mt-2 space-y-1 text-sm">
+            <p className="break-words-safe text-muted-foreground">
+              {selectedJob?.description}
             </p>
-            <p>
-              <strong>Budget:</strong> {selectedJob?.budget}
-            </p>
-            <p>
-              <strong>Deadline:</strong>{" "}
-              {selectedJob?.deadline.toLocaleDateString()}
-            </p>
-            <p>
-              <strong>Status:</strong> {selectedJob?.status}
+            <p>Budget · {selectedJob?.budget}</p>
+            <p className="text-muted-foreground">
+              Due{" "}
+              {selectedJob?.deadline
+                ? new Date(selectedJob.deadline).toLocaleDateString()
+                : "—"}
             </p>
           </div>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Bidder</TableHead>
-                <TableHead>Amount</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Action</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {selectedJob?.bids?.map((bid: Bid) => (
-                <TableRow key={bid.bid_id}>
-                  <TableCell>{bid?.freelancer_name}</TableCell>
-                  <TableCell>{bid?.bid_amount}</TableCell>
-                  <TableCell>{bid?.status?.toUpperCase()}</TableCell>
-                  <TableCell>
-                    {bid?.status === "pending" && (
-                      <>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="mr-2"
-                          onClick={() => acceptMutation.mutate(bid.bid_id)}
-                        >
-                          Accept
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => rejectMutation.mutate(bid.bid_id)}
-                        >
-                          Reject
-                        </Button>
-                      </>
-                    )}
-                  </TableCell>
+          <div className="overflow-x-auto rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Bidder</TableHead>
+                  <TableHead>Amount</TableHead>
+                  <TableHead>Submitted</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Action</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {selectedJob?.bids?.map((bid: Bid) => (
+                  <TableRow key={bid.bid_id}>
+                    <TableCell className="break-words-safe">
+                      {bid?.freelancer_name}
+                    </TableCell>
+                    <TableCell>{bid?.bid_amount}</TableCell>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">
+                      {formatDateTime(bid?.created_at)}
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge status={bid?.status || "pending"} />
+                    </TableCell>
+                    <TableCell>
+                      {bid?.status === "pending" ? (
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => acceptMutation.mutate(bid.bid_id)}
+                          >
+                            Accept
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => rejectMutation.mutate(bid.bid_id)}
+                          >
+                            Reject
+                          </Button>
+                        </div>
+                      ) : null}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageShell>
   );
 }

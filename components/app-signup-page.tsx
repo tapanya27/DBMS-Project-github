@@ -175,32 +175,37 @@ export function SignUp() {
   });
   if (verifying) {
     return (
-      <div className="min-h-screen flex items-center flex-col gap-4 justify-center bg-background p-4">
-        <h1>Verify your email</h1>
-        <form
-          onSubmit={handleVerify}
-          className="flex flex-col gap-4 border border-b-gray-400 p-4 rounded-md"
-        >
-          <label id="code">Enter your verification code</label>
-          <Input
-            value={code}
-            id="code"
-            name="code"
-            onChange={(e) => setCode(e.target.value)}
-          />
-          <Button type="submit" className="w-full mt-4">
-            Verify
-          </Button>
-        </form>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-muted/30 p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="text-xl">Verify your email</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleVerify} className="flex flex-col gap-4">
+              <label htmlFor="code" className="text-sm font-medium">
+                Verification code
+              </label>
+              <Input
+                value={code}
+                id="code"
+                name="code"
+                onChange={(e) => setCode(e.target.value)}
+              />
+              <Button type="submit" className="w-full">
+                Verify
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
       </div>
     );
   }
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle className="text-2xl font-bold text-center">
-            Sign Up
+    <div className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
+      <Card className="w-full max-w-md shadow-sm">
+        <CardHeader className="space-y-2 text-center">
+          <CardTitle className="text-2xl font-semibold">
+            Create account
           </CardTitle>
         </CardHeader>
         <CardContent>

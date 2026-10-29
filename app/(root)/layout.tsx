@@ -5,9 +5,9 @@ import { User } from "@clerk/nextjs/server";
 const RootLayout = ({ children }: { children: React.ReactNode }) => {
   const { user } = useUser();
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex min-h-screen flex-col overflow-x-hidden">
       <ResponsiveNavbar user={user as unknown as User} />
-      <main className="flex-grow">{children}</main>
+      <main className="w-full flex-1">{children}</main>
     </div>
   );
 };
