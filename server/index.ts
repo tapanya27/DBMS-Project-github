@@ -114,7 +114,7 @@ export async function getUserWithSkills(userId: number) {
     Users.role,
     Users.rating,
     Users.created_at,
-    COALESCE(ARRAY_AGG(Skills.skill_name), '{}') AS skills
+    COALESCE(ARRAY_REMOVE(ARRAY_AGG(Skills.skill_name), NULL), '{}') AS skills
 FROM 
     Users
 LEFT JOIN 
@@ -201,43 +201,54 @@ export async function updateUserDetails({
   userId,
   name,
   skills,
+  role,
 }: {
   userId: number;
   name: string;
   skills: string[];
+  role: string;
 }) {
   const sql = neon(process.env.NEXT_PUBLIC_DATABASE_URL!);
-  const response = await sql`
+  const cleanSkills = (Array.isArray(skills) ? skills : []).filter(
+    (skill): skill is string => typeof skill === "string" && skill.length > 0
+  );
+  try {
+    await sql`
       UPDATE Users
-      SET name = ${name}
+      SET name = ${name}, role = ${role}
       WHERE user_id = ${userId};
     `;
-  console.log("User updated:", response);
-  const deleteSkills = await sql`
+    await sql`
       DELETE FROM Skills
       WHERE user_id = ${userId};
     `;
-  for (const skill of skills) {
-    await sql`
+    for (const skill of cleanSkills) {
+      await sql`
         INSERT INTO Skills (user_id, skill_name)
         VALUES (${userId}, ${skill});
       `;
+    }
+    return { ok: true };
+  } catch (error) {
+    console.error("Error in updateUserDetails:", error);
+    throw error;
   }
-
-  return deleteSkills;
 }
 export async function rejectBid(bidId: number) {
   const sql = neon(process.env.NEXT_PUBLIC_DATABASE_URL!);
-  const response =
-    await sql`UPDATE Bids SET status = 'rejected' WHERE bid_id = ${bidId} and status = 'pending';`;
-  return response;
+  await sql`UPDATE Bids SET status = 'rejected' WHERE bid_id = ${bidId} and status = 'pending';`;
+  return { ok: true };
 }
 
 export async function acceptBid(bidId: number) {
   const sql = neon(process.env.NEXT_PUBLIC_DATABASE_URL!);
-  const response =
-    await sql`UPDATE Bids SET status = 'accepted' WHERE bid_id = ${bidId} and status = 'pending';`;
-  return response;
+  await sql`UPDATE Bids SET status = 'accepted' WHERE bid_id = ${bidId} and status = 'pending';`;
+  await sql`
+    UPDATE Jobs
+    SET status = 'in progress'
+    WHERE job_id = (SELECT job_id FROM Bids WHERE bid_id = ${bidId})
+  `;
+  return { ok: true };
 }
 
 export async function completeJob(jobId: number) {

@@ -25,7 +25,7 @@ import React from "react";
 import { useUser } from "@clerk/nextjs";
 import { useQuery } from "@tanstack/react-query";
 import { User, UserWithSkills } from "@/types";
-import { getUserDetails, getUserWithSkills } from "@/server";
+import { createUser, getUserDetails, getUserWithSkills } from "@/server";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { updateUserDetails } from "@/server";
 import { useToast } from "@/hooks/use-toast";
@@ -54,6 +54,9 @@ export default function ProfilePage() {
   const [userData, setUserData] = useState<UserWithSkills>();
   const [isEditing, setIsEditing] = useState(false);
   const [selectedSkill, setSelectedSkill] = useState("");
+  const [setupName, setSetupName] = useState("");
+  const [setupRole, setSetupRole] = useState("");
+  const [setupSkills, setSetupSkills] = useState<string[]>([]);
   const { user } = useUser();
   const { data, isLoading } = useQuery({
     queryKey: ["user"],
@@ -68,19 +71,33 @@ export default function ProfilePage() {
   const { data: userdata, isLoading: userdataLoading } = useQuery({
     queryKey: ["userdata"],
     queryFn: async () => {
-      const result = await getUserWithSkills(data?.[0].user_id as number);
+      const result = await getUserWithSkills(data?.[0]?.user_id as number);
       const res = result as UserWithSkills[];
-      setUserData(res[0]);
-      return res[0];
+      const profile = res[0]
+        ? {
+            ...res[0],
+            skills: (Array.isArray(res[0].skills) ? res[0].skills : []).filter(
+              (skill): skill is string => typeof skill === "string" && skill.length > 0
+            ),
+          }
+        : undefined;
+      setUserData(profile);
+      return profile;
     },
-    enabled: !!data?.[0].user_id,
+    enabled: !!data?.[0]?.user_id,
   });
   const queryClient = useQueryClient();
 
   const updateUserMutation = useMutation({
-    mutationFn: updateUserDetails,
+    mutationFn: async (values: {
+      userId: number;
+      name: string;
+      skills: string[];
+      role: string;
+    }) => updateUserDetails(values),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["userdata"] });
+      queryClient.invalidateQueries({ queryKey: ["user"] });
       toast({
         title: "Profile updated successfully",
         variant: "default",
@@ -101,10 +118,12 @@ export default function ProfilePage() {
   };
 
   const handleAddSkill = () => {
-    if (selectedSkill && userData && !userData.skills.includes(selectedSkill)) {
+    if (!selectedSkill || !userData) return;
+    const currentSkills = Array.isArray(userData.skills) ? userData.skills : [];
+    if (!currentSkills.includes(selectedSkill)) {
       setUserData({
         ...userData,
-        skills: [...userData.skills, selectedSkill],
+        skills: [...currentSkills, selectedSkill],
       });
       setSelectedSkill("");
     }
@@ -112,9 +131,10 @@ export default function ProfilePage() {
 
   const handleRemoveSkill = (skillToRemove: string) => {
     if (userData) {
+      const currentSkills = Array.isArray(userData.skills) ? userData.skills : [];
       setUserData({
         ...userData,
-        skills: userData.skills.filter((skill) => skill !== skillToRemove),
+        skills: currentSkills.filter((skill) => skill !== skillToRemove),
       });
     }
   };
@@ -125,15 +145,139 @@ export default function ProfilePage() {
         userId: userData.user_id,
         name: userData.name,
         skills: userData.skills,
+        role: userData.role,
       });
     }
-    console.log("Updating profile:", userData);
-    setIsEditing(false);
   };
-  if (isLoading || userdataLoading) {
+  const createProfileMutation = useMutation({
+    mutationFn: async () => {
+      const [firstName, ...rest] = setupName.trim().split(/\s+/);
+      const email = user?.emailAddresses[0].emailAddress;
+      if (!email || !firstName || !setupRole) {
+        throw new Error("Name, role, and email are required");
+      }
+      return createUser(
+        firstName,
+        rest.join(" ") || firstName,
+        email,
+        setupSkills,
+        setupRole
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["user"] });
+      queryClient.invalidateQueries({ queryKey: ["userdata"] });
+      toast({ title: "Profile created" });
+    },
+    onError: () => {
+      toast({
+        title: "Failed to create profile",
+        variant: "destructive",
+      });
+    },
+  });
+
+  if (isLoading || (data?.[0] && userdataLoading)) {
     return (
       <div className="flex items-center justify-center h-screen">
         <Loader2 className="animate-spin w-10 h-10" />
+      </div>
+    );
+  }
+
+  if (!data?.[0]) {
+    return (
+      <div className="container mx-auto py-8">
+        <Card className="max-w-2xl mx-auto">
+          <CardHeader>
+            <CardTitle>Choose your role</CardTitle>
+            <CardDescription>
+              Sign-in only checks your email. Client or freelancer is stored
+              in this app, and you pick it here.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="setup-name">Name</Label>
+              <Input
+                id="setup-name"
+                value={setupName}
+                onChange={(e) => setSetupName(e.target.value)}
+                placeholder="Your name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>I am a</Label>
+              <Select value={setupRole} onValueChange={setSetupRole}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a role" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="client">Client — post jobs</SelectItem>
+                  <SelectItem value="freelancer">
+                    Freelancer — apply to jobs
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Skills</Label>
+              <div className="flex flex-wrap gap-2 mb-2">
+                {setupSkills.map((skill) => (
+                  <Badge key={skill} variant="secondary" className="text-sm">
+                    {skill}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSetupSkills(setupSkills.filter((s) => s !== skill))
+                      }
+                      className="ml-1 text-muted-foreground hover:text-foreground"
+                    >
+                      <X size={14} />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <Select value={selectedSkill} onValueChange={setSelectedSkill}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Select a skill" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableSkills.map((skill) => (
+                      <SelectItem key={skill} value={skill}>
+                        {skill}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    if (selectedSkill && !setupSkills.includes(selectedSkill)) {
+                      setSetupSkills([...setupSkills, selectedSkill]);
+                      setSelectedSkill("");
+                    }
+                  }}
+                >
+                  Add Skill
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+          <CardFooter>
+            <Button
+              onClick={() => createProfileMutation.mutate()}
+              disabled={
+                createProfileMutation.isPending ||
+                !setupName.trim() ||
+                !setupRole
+              }
+            >
+              Save profile
+            </Button>
+          </CardFooter>
+        </Card>
       </div>
     );
   }
@@ -160,9 +304,37 @@ export default function ProfilePage() {
                 />
               </div>
               <div className="space-y-2">
+                <Label>Role</Label>
+                {isEditing ? (
+                  <Select
+                    value={userData?.role}
+                    onValueChange={(role) =>
+                      setUserData((prev) => (prev ? { ...prev, role } : prev))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="client">Client — post jobs</SelectItem>
+                      <SelectItem value="freelancer">
+                        Freelancer — apply to jobs
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    value={
+                      userData?.role === "freelancer" ? "Freelancer" : "Client"
+                    }
+                    disabled
+                  />
+                )}
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="skills">Skills</Label>
                 <div className="flex flex-wrap gap-2 mb-2">
-                  {userData?.skills.map((skill) => (
+                  {(Array.isArray(userData?.skills) ? userData.skills : []).map((skill) => (
                     <Badge key={skill} variant="secondary" className="text-sm">
                       {skill}
                       {isEditing && (
@@ -206,7 +378,7 @@ export default function ProfilePage() {
         <CardFooter className="flex flex-row">
           {isEditing ? (
             <div className="flex gap-6 justify-between">
-              <Button type="submit" onClick={handleSubmit}>
+              <Button type="button" onClick={handleSubmit}>
                 Save Changes
               </Button>
               <Button variant="outline" onClick={() => setIsEditing(false)}>

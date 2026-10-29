@@ -23,11 +23,13 @@ import { Badge } from "@/components/ui/badge";
 import { Bid, Job, User } from "@/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  acceptBid,
   createBid,
   deleteBid,
   getJobById,
   getJobs,
   getUserDetails,
+  rejectBid,
   updateBidAmount,
 } from "@/server";
 import { Edit, Loader2, Trash2 } from "lucide-react";
@@ -185,8 +187,52 @@ const PageJob = () => {
     setIsBidModalOpen(false);
     router.refresh();
   };
+  const isJobOwner = userDetails?.[0]?.name === job?.client_name;
+  const acceptMutation = useMutation({
+    mutationFn: async (bidId: number) => acceptBid(bidId),
+    onSuccess: () => {
+      toast({
+        title: "Bid accepted",
+        description: "This job is now in progress.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["bids"] });
+      queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["postedJobs"] });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to accept bid",
+        variant: "destructive",
+      });
+    },
+  });
+  const rejectMutation = useMutation({
+    mutationFn: async (bidId: number) => rejectBid(bidId),
+    onSuccess: () => {
+      toast({
+        title: "Bid rejected",
+      });
+      queryClient.invalidateQueries({ queryKey: ["bids"] });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to reject bid",
+        variant: "destructive",
+      });
+    },
+  });
   const handleApplyClick = () => {
-    if (userDetails?.[0].role === "client") {
+    if (!userDetails?.[0]) {
+      toast({
+        title: "Finish your profile",
+        description: "Choose client or freelancer on your profile before applying.",
+      });
+      router.push("/profile");
+      return;
+    }
+    if (userDetails[0].role === "client") {
       setIsAlertOpen(true);
     } else {
       setIsBidModalOpen(true);
@@ -231,7 +277,7 @@ const PageJob = () => {
               </p>
             </CardContent>
             <CardFooter>
-              {userDetails?.[0].name === job?.client_name ? (
+              {userDetails?.[0]?.name === job?.client_name ? (
                 <Button className="w-full" onClick={handleApplyClick} disabled>
                   You can't apply to your own job
                 </Button>
@@ -262,6 +308,7 @@ const PageJob = () => {
                       <TableHead>Bidder</TableHead>
                       <TableHead>Amount</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -279,7 +326,26 @@ const PageJob = () => {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          {bid.freelancer_name === userDetails?.[0].name &&
+                          {isJobOwner && bid.status === "pending" && (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="mr-2"
+                                onClick={() => acceptMutation.mutate(bid.bid_id)}
+                              >
+                                Accept
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => rejectMutation.mutate(bid.bid_id)}
+                              >
+                                Reject
+                              </Button>
+                            </>
+                          )}
+                          {bid.freelancer_name === userDetails?.[0]?.name &&
                             bid.status === "pending" && (
                               <>
                                 <Button

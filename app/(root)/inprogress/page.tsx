@@ -21,7 +21,7 @@ import {
 import { CheckCircle, Loader2, Star } from "lucide-react";
 import { useUser } from "@clerk/nextjs";
 import { Feedback, JobBids, User } from "@/types";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   completeJob,
   getAllFeedback,
@@ -38,6 +38,7 @@ export default function InProgressPage() {
   const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false);
   const [rating, setRating] = useState(0);
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { user } = useUser();
   const { toast } = useToast();
   const { data: userDetails, isLoading: userDetailsLoading } = useQuery<User[]>(
@@ -60,7 +61,7 @@ export default function InProgressPage() {
       );
       return result as JobBids[];
     },
-    enabled: !!userDetails?.[0].user_id,
+    enabled: !!userDetails?.[0]?.user_id,
   });
   const completeMutation = useMutation({
     mutationFn: async (jobId: number) => {
@@ -68,6 +69,7 @@ export default function InProgressPage() {
       return result;
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["postedJobs"] });
       toast({
         title: "Success",
         description: "Job marked as completed successfully",
@@ -100,6 +102,7 @@ export default function InProgressPage() {
       return result;
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["feedback"] });
       toast({
         title: "Success",
         description: "Feedback submitted successfully",
@@ -190,10 +193,7 @@ export default function InProgressPage() {
                       {feedback?.filter(
                         (feedback) => feedback.job_id === job.job_id
                       ).length === 0 ? (
-                        <Button
-                          onClick={() => handleOpenFeedback(job)}
-                          disabled={job.job_status === "in progress"}
-                        >
+                        <Button onClick={() => handleOpenFeedback(job)}>
                           Give Feedback
                         </Button>
                       ) : (

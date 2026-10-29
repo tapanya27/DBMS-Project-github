@@ -32,6 +32,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   acceptBid,
   completeJob,
+  getAllFeedback,
   getAppliedJobs,
   getUserDetails,
   getUserPostedJobs,
@@ -39,7 +40,7 @@ import {
 } from "@/server";
 import { Loader, Loader2 } from "lucide-react";
 import { useUser } from "@clerk/nextjs";
-import { Bid, JobBids, User, userBids } from "@/types";
+import { Bid, Feedback, JobBids, User, userBids } from "@/types";
 import { toast } from "@/hooks/use-toast";
 
 export default function UserJobsPage() {
@@ -110,22 +111,36 @@ export default function UserJobsPage() {
       );
       return result as JobBids[];
     },
-    enabled: !!userDetails?.[0].user_id,
+    enabled: !!userDetails?.[0]?.user_id,
   });
   const handleManageJob = (job: any) => {
     setSelectedJob(job);
     setIsManageModalOpen(true);
   };
+  const { data: feedback } = useQuery({
+    queryKey: ["feedback"],
+    queryFn: async () => {
+      const result = await getAllFeedback();
+      return result as Feedback[];
+    },
+    enabled: !!userDetails?.[0]?.user_id,
+  });
+  const feedbackFor = (jobId: number) =>
+    feedback?.find(
+      (item) =>
+        Number(item.job_id) === Number(jobId) &&
+        Number(item.to_user_id) === Number(userDetails?.[0]?.user_id)
+    );
   const { data, isLoading } = useQuery({
     queryKey: ["jobs"],
     queryFn: async () => {
       const result = await getAppliedJobs(userDetails?.[0].user_id as number);
       return result as userBids[];
     },
-    enabled: !!userDetails?.[0].user_id,
+    enabled: !!userDetails?.[0]?.user_id,
   });
   const [activeTab, setActiveTab] = useState(
-    userDetails?.[0].role === "freelancer" ? "applied" : "posted"
+    userDetails?.[0]?.role === "freelancer" ? "applied" : "posted"
   );
   useEffect(() => {
     if (userDetails?.[0]?.role) {
@@ -147,7 +162,7 @@ export default function UserJobsPage() {
             Your Job Dashboard
           </h1>
           <p className="text-xl md:text-2xl mb-8">
-            {userDetails?.[0].role === "freelancer"
+            {userDetails?.[0]?.role === "freelancer"
               ? "Manage your job applications and postings"
               : "Manage your job postings"}
           </p>
@@ -163,7 +178,7 @@ export default function UserJobsPage() {
             className="w-full"
           >
             <TabsList className="grid w-full grid-cols-2">
-              {userDetails?.[0].role === "freelancer" && (
+              {userDetails?.[0]?.role === "freelancer" && (
                 <TabsTrigger value="applied">Applied Jobs</TabsTrigger>
               )}
               <TabsTrigger value="posted">Posted Jobs</TabsTrigger>
@@ -192,6 +207,12 @@ export default function UserJobsPage() {
                           <p>
                             <strong>Deadline:</strong>{" "}
                             {job.deadline.toLocaleDateString()}
+                          </p>
+                          <p>
+                            <strong>Client feedback:</strong>{" "}
+                            {feedbackFor(job.job_id)
+                              ? `${feedbackFor(job.job_id)?.rating} / 5`
+                              : "No feedback yet"}
                           </p>
                         </CardContent>
                         <CardFooter>
@@ -283,6 +304,14 @@ export default function UserJobsPage() {
             </p>
             <p>
               <strong>Your Bid Amount:</strong> {selectedJob?.bid_amount}
+            </p>
+            <p>
+              <strong>Client feedback:</strong>{" "}
+              {selectedJob
+                ? feedbackFor(selectedJob.job_id)
+                  ? `${feedbackFor(selectedJob.job_id)?.rating} / 5`
+                  : "No feedback yet"
+                : "No feedback yet"}
             </p>
           </div>
         </DialogContent>

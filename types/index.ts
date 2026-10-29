@@ -63,4 +63,5 @@ export type Feedback = {
   job_id: number;
   from_user_id: number;
   to_user_id: number;
+  rating: number;
 };
