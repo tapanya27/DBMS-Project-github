@@ -89,7 +89,7 @@ const PageJob = () => {
   const router = useRouter();
   const [deletingBidId, setDeletingBidId] = useState<number | null>(null);
   const { data: bids, isLoading: isLoadingBids } = useQuery<Bid[]>({
-    queryKey: ["bids"],
+    queryKey: ["bids", jobId],
     queryFn: async () => {
       const result = await getJobById(jobId);
       return result as Bid[];
@@ -308,10 +308,22 @@ const PageJob = () => {
           </Card>
           <Card>
             <CardHeader>
-              <CardTitle className="text-xl">Bids</CardTitle>
+              <CardTitle className="text-xl">
+                {isJobOwner ? "Bids" : "Your bid"}
+              </CardTitle>
+              {!isJobOwner ? (
+                <p className="text-sm text-muted-foreground">
+                  Bid status for this job is only visible to the company that
+                  posted it.
+                </p>
+              ) : null}
             </CardHeader>
             <CardContent>
-              {bids && bids.length > 0 ? (
+              {isLoadingBids ? (
+                <div className="flex justify-center py-6">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : isJobOwner && bids && bids.length > 0 ? (
                 <div className="overflow-x-auto rounded-lg border">
                 <Table>
                   <TableHeader>
@@ -390,9 +402,47 @@ const PageJob = () => {
                   </TableBody>
                 </Table>
                 </div>
-              ) : (
+              ) : !isJobOwner && bids && bids.length > 0 ? (
+                <div className="space-y-2 rounded-lg border p-4 text-sm">
+                  <p>
+                    <span className="font-medium">Amount · </span>
+                    {bids[0].bid_amount}
+                  </p>
+                  <p className="text-muted-foreground">
+                    Submitted · {formatDateTime(bids[0].created_at)}
+                  </p>
+                  <p>
+                    <span className="font-medium">Status · </span>
+                    {bids[0].status}
+                  </p>
+                  {bids[0].status === "pending" ? (
+                    <div className="flex flex-wrap gap-2 pt-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setDeletingBidId(bids[0].bid_id)}
+                      >
+                        <Trash2 className="mr-1 h-4 w-4" />
+                        Withdraw
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setEditingBidId(bids[0].bid_id)}
+                      >
+                        <Edit className="mr-1 h-4 w-4" />
+                        Edit amount
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : isJobOwner ? (
                 <p className="text-center text-sm text-muted-foreground">
                   No bids yet.
+                </p>
+              ) : (
+                <p className="text-center text-sm text-muted-foreground">
+                  You have not placed a bid on this job yet.
                 </p>
               )}
             </CardContent>

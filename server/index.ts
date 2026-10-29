@@ -67,8 +67,36 @@ export async function createUser(
 }
 
 export async function getJobById(jobId: number) {
-  await requireClerkEmail();
+  const me = await requireDbUser();
   const sql = getSql();
+  const jobRows = await sql`
+    SELECT client_id FROM Jobs WHERE job_id = ${jobId}
+  `;
+  if (!jobRows[0]) {
+    throw new Error("Job not found");
+  }
+  const isJobOwner = Number(jobRows[0].client_id) === Number(me.user_id);
+
+  if (isJobOwner) {
+    return sql`
+      SELECT
+        Bids.bid_id,
+        Bids.freelancer_id,
+        Users.name AS freelancer_name,
+        Bids.bid_amount,
+        Bids.status,
+        to_char(
+          Bids.created_at AT TIME ZONE 'UTC',
+          'YYYY-MM-DD"T"HH24:MI:SS"Z"'
+        ) AS created_at
+      FROM Bids
+      JOIN Users ON Bids.freelancer_id = Users.user_id
+      WHERE Bids.job_id = ${jobId}
+      ORDER BY Bids.created_at DESC
+    `;
+  }
+
+  // Non-owners only see their own bid (no other freelancers' status or amounts).
   return sql`
     SELECT
       Bids.bid_id,
@@ -83,6 +111,7 @@ export async function getJobById(jobId: number) {
     FROM Bids
     JOIN Users ON Bids.freelancer_id = Users.user_id
     WHERE Bids.job_id = ${jobId}
+      AND Bids.freelancer_id = ${me.user_id}
     ORDER BY Bids.created_at DESC
   `;
 }
